@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kiln — Focus Timer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#1a1c20; --panel:#232630; --panel-2:#2b2f3a; --text:#eef0f3; --muted:#9195a3;
+  --accent:#e8a33d; --accent-2:#f0b866; --ring-track:#33384420; --danger:#e0654f;
+  --radius:18px; --font-display:'Space Grotesk',sans-serif; --font-body:'Inter',sans-serif;
+  --fs-scale:1; --motion:1;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+:root:not([data-theme="light"]){ }
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){ --bg:#f3f1ec; --panel:#ffffff; --panel-2:#f0ede6; --text:#20222a; --muted:#6b6e7a; --ring-track:#00000012; }
+}
+:root[data-theme="light"]{ --bg:#f3f1ec; --panel:#ffffff; --panel-2:#f0ede6; --text:#20222a; --muted:#6b6e7a; --ring-track:#00000012; }
+:root[data-contrast="high"]{ --muted:var(--text); --ring-track:#ffffff40; }
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; min-height:100%; background:var(--bg); color:var(--text); font-family:var(--font-body);
+  font-size:calc(16px * var(--fs-scale)); transition:background .4s ease, color .4s ease; overflow-x:hidden;
+  position:relative;
+}
+.bg-anim{position:fixed;inset:0;z-index:-1;opacity:.5;background:radial-gradient(circle at 20% 20%,var(--accent) 0%,transparent 40%),radial-gradient(circle at 80% 80%,var(--accent-2) 0%,transparent 40%);filter:blur(60px);animation:drift calc(18s / var(--motion)) ease-in-out infinite alternate;}
+@keyframes drift{from{transform:translate(-5%,-5%) scale(1);}to{transform:translate(5%,5%) scale(1.15);}}
+.bg-custom{position:fixed;inset:0;z-index:-2;background-size:cover;background-position:center;}
+.bg-dim{position:fixed;inset:0;z-index:-1;background:var(--bg);}
+.wrap{max-width:520px;margin:0 auto;padding:40px 20px 80px;min-height:100%;display:flex;flex-direction:column;align-items:center;}
+header{width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;}
+.brand{font-family:var(--font-display);font-weight:700;font-size:1.3rem;letter-spacing:.02em;}
+.brand span{color:var(--accent);}
+.icon-btn{background:var(--panel);border:1px solid var(--ring-track);color:var(--text);width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:1.2rem;transition:transform .15s ease, background .2s;}
+.icon-btn:hover{background:var(--panel-2);}
+.icon-btn:active{transform:scale(.93);}
+.mode-tabs{display:flex;gap:8px;background:var(--panel);padding:6px;border-radius:14px;margin-bottom:36px;}
+.mode-tabs button{flex:1;border:none;background:transparent;color:var(--muted);padding:10px 14px;border-radius:10px;font-family:var(--font-body);font-weight:600;font-size:.85rem;cursor:pointer;transition:.2s;}
+.mode-tabs button.active{background:var(--accent);color:#1a1c20;}
+.ring-wrap{position:relative;width:280px;height:280px;margin-bottom:28px;}
+svg.ring{width:100%;height:100%;transform:rotate(-90deg);}
+.ring-track{fill:none;stroke:var(--ring-track);stroke-width:10;}
+.ring-progress{fill:none;stroke:var(--accent);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset 1s linear;}
+.time-display{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.time{font-family:var(--font-display);font-weight:700;font-size:3.2rem;letter-spacing:.01em;font-variant-numeric:tabular-nums;}
+.session-count{color:var(--muted);font-size:.85rem;margin-top:4px;}
+.controls{display:flex;gap:14px;margin-bottom:30px;}
+.controls button{border:none;border-radius:14px;padding:14px 22px;font-family:var(--font-body);font-weight:600;font-size:.95rem;cursor:pointer;transition:transform .15s;}
+.controls button:active{transform:scale(.95);}
+.btn-primary{background:var(--accent);color:#1a1c20;padding:14px 34px;}
+.btn-ghost{background:var(--panel);color:var(--text);}
+.goal-bar{width:100%;background:var(--panel);border-radius:12px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;font-size:.85rem;color:var(--muted);}
+.goal-bar b{color:var(--text);}
+[data-reduce-motion="true"] *{animation-duration:.001s !important;transition-duration:.001s !important;}
+[data-large-buttons="true"] .controls button{padding:20px 30px;font-size:1.1rem;}
+[data-large-buttons="true"] .icon-btn{width:54px;height:54px;font-size:1.4rem;}
+
+/* Settings panel */
+.overlay{position:fixed;inset:0;background:#00000060;backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .25s;z-index:10;}
+.overlay.open{opacity:1;pointer-events:auto;}
+.panel{position:fixed;top:0;right:0;bottom:0;width:min(420px,92vw);background:var(--panel);z-index:11;transform:translateX(100%);transition:transform .3s ease;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);}
+.panel.open{transform:translateX(0);}
+.panel-head{display:flex;justify-content:space-between;align-items:center;padding:20px 20px 10px;}
+.panel-head h2{font-family:var(--font-display);font-size:1.15rem;margin:0;}
+.tabs-strip{display:flex;overflow-x:auto;gap:6px;padding:8px 16px;border-bottom:1px solid var(--ring-track);}
+.tabs-strip button{flex:0 0 auto;background:var(--panel-2);border:none;color:var(--muted);padding:8px 13px;border-radius:20px;font-size:.78rem;font-weight:600;cursor:pointer;white-space:nowrap;}
+.tabs-strip button.active{background:var(--accent);color:#1a1c20;}
+.panel-body{flex:1;overflow-y:auto;padding:16px 20px 30px;}
+.setting-group{display:none;}
+.setting-group.active{display:block;}
+.setting-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--ring-track);}
+.setting-row:last-child{border-bottom:none;}
+.setting-row label{font-size:.85rem;color:var(--text);}
+.setting-row .desc{display:block;font-size:.7rem;color:var(--muted);margin-top:2px;}
+select,input[type=number],input[type=text]{background:var(--panel-2);color:var(--text);border:1px solid var(--ring-track);border-radius:8px;padding:7px 10px;font-family:var(--font-body);font-size:.82rem;max-width:150px;}
+input[type=range]{width:110px;accent-color:var(--accent);}
+input[type=color]{width:38px;height:30px;border:none;border-radius:8px;background:none;cursor:pointer;}
+.switch{position:relative;width:42px;height:24px;flex-shrink:0;}
+.switch input{opacity:0;width:0;height:0;}
+.slider-tg{position:absolute;inset:0;background:var(--ring-track);border-radius:24px;cursor:pointer;transition:.2s;}
+.slider-tg:before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;}
+input:checked + .slider-tg{background:var(--accent);}
+input:checked + .slider-tg:before{transform:translateX(18px);}
+.reset-btn{width:100%;margin-top:10px;background:var(--danger);color:#fff;border:none;padding:12px;border-radius:10px;font-weight:600;cursor:pointer;}
+.small-note{font-size:.72rem;color:var(--muted);margin:8px 0 4px;}
+</style>
+</head>
+<body>
+<div class="bg-dim" id="bgDim"></div>
+<div class="bg-custom" id="bgCustom"></div>
+<div class="bg-anim" id="bgAnim"></div>
+
+<div class="wrap">
+  <header>
+    <div class="brand">Kiln<span>.</span></div>
+    <button class="icon-btn" id="openSettings" title="Settings">⚙</button>
+  </header>
+
+  <div class="mode-tabs">
+    <button class="mode-btn active" data-mode="work">Focus</button>
+    <button class="mode-btn" data-mode="short">Short break</button>
+    <button class="mode-btn" data-mode="long">Long break</button>
+  </div>
+
+  <div class="ring-wrap">
+    <svg class="ring" viewBox="0 0 200 200">
+      <circle class="ring-track" cx="100" cy="100" r="90"></circle>
+      <circle class="ring-progress" id="ringProgress" cx="100" cy="100" r="90" stroke-dasharray="565.5"></circle>
+    </svg>
+    <div class="time-display">
+      <div class="time" id="timeText">25:00</div>
+      <div class="session-count" id="sessionText">Session 1 · 0 completed</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn-ghost" id="resetBtn">Reset</button>
+    <button class="btn-primary" id="startBtn">Start</button>
+    <button class="btn-ghost" id="skipBtn">Skip</button>
+  </div>
+
+  <div class="goal-bar" id="goalBar">Daily goal: <b id="goalProgress">0 / 8</b> pomodoros</div>
+</div>
+
+<div class="overlay" id="overlay"></div>
+<div class="panel" id="panel">
+  <div class="panel-head"><h2>Settings</h2><button class="icon-btn" id="closeSettings">✕</button></div>
+  <div class="tabs-strip" id="tabStrip">
+    <button data-tab="timer" class="active">Timer</button>
+    <button data-tab="sound">Sound</button>
+    <button data-tab="appearance">Appearance</button>
+    <button data-tab="notif">Notifications</button>
+    <button data-tab="behavior">Behavior</button>
+    <button data-tab="stats">Stats</button>
+    <button data-tab="access">Accessibility</button>
+    <button data-tab="api">API</button>
+  </div>
+  <div class="panel-body" id="panelBody"></div>
+</div>
+
+<audio id="customAudio"></audio>
+<input type="file" id="customSoundFile" accept="audio/*" style="display:none">
+<input type="file" id="customBgFile" accept="image/*" style="display:none">
+
+<script>
+const $=s=>document.querySelector(s);
+const defaults={
+  workMin:25, shortMin:5, longMin:15, longInterval:4, autoStartBreaks:false, autoStartWork:false,
+  dailyGoal:8, strictMode:false, endAutoSkip:false,
+  alarmSound:'bell', alarmVolume:70, alarmRepeat:1, tickEnabled:false, tickStyle:'soft', tickVolume:30,
+  startSoundEnabled:false, startSound:'pop', muteAll:false, useCustomSound:false,
+  theme:'ember', colorMode:'auto', accent:'#e8a33d', bgBlur:4, bgOpacity:60, animatedBg:true,
+  font:'display', fontSize:'md', ringStyle:'solid', showDigital:true, compactMode:false,
+  notifEnabled:false, notifWorkMsg:'Focus session complete — take a break.', notifBreakMsg:'Break over — back to focus.',
+  notifSound:true, titleCountdown:true,
+  keepAwake:true, autoPauseTab:false, kbShortcuts:true, confirmReset:true, fullscreenMode:false, hideCursorIdle:false,
+  showStats:true, weeklyGoal:40, trackStreak:true, showHistory:true,
+  highContrast:false, reduceMotion:false, largeButtons:false, largerFont:false, language:'en',
+  musicEnabled:true, musicTrack:'pad', musicVolume:25,
+  apiEnabled:false, apiUrl:'http://localhost:3000'
+};
+let S=JSON.parse(JSON.stringify(defaults));
+try{const saved=localStorage.getItem('kiln_settings'); if(saved) S={...S,...JSON.parse(saved)};}catch(e){}
+let stats=JSON.parse(localStorage.getItem('kiln_stats')||'{"completedToday":0,"completedWeek":0,"streak":0,"date":""}');
+const today=new Date().toDateString();
+if(stats.date!==today){ stats.completedToday=0; stats.date=today; }
+
+function save(){ try{localStorage.setItem('kiln_settings',JSON.stringify(S));}catch(e){} }
+function saveStats(){ try{localStorage.setItem('kiln_stats',JSON.stringify(stats));}catch(e){} }
+
+// ---- Timer core ----
+let mode='work', running=false, remaining=S.workMin*60, timerId=null, completedCount=0, apiSessionId=null, apiPollId=null;
+const RING_LEN=565.5;
+function durFor(m){ return {work:S.workMin, short:S.shortMin, long:S.longMin}[m]*60; }
+function fmt(s){ const m=Math.floor(s/60), sec=s%60; return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0'); }
+function updateDisplay(){
+  $('#timeText').textContent = fmt(remaining);
+  const total = durFor(mode);
+  const frac = total? remaining/total : 0;
+  $('#ringProgress').style.strokeDashoffset = RING_LEN*(1-frac);
+  $('#sessionText').textContent = `Session ${completedCount+1} · ${completedCount} completed`;
+  $('#goalProgress').textContent = `${stats.completedToday} / ${S.dailyGoal}`;
+  if(S.titleCountdown) document.title = `${fmt(remaining)} — ${mode==='work'?'Focus':'Break'} · Kiln`;
+  else document.title='Kiln — Focus Timer';
+}
+function setMode(m,resetTime=true){
+  mode=m;
+  document.querySelectorAll('.mode-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+  if(resetTime) remaining=durFor(m);
+  updateDisplay();
+}
+function tick(){
+  if(remaining<=0){ finishSession(); return; }
+  remaining--;
+  if(S.tickEnabled) playTick();
+  updateDisplay();
+}
+function finishSession(){
+  clearInterval(timerId); running=false; $('#startBtn').textContent='Start';
+  stopMusic(); apiStop();
+  playAlarm();
+  if(S.notifEnabled && 'Notification' in window && Notification.permission==='granted'){
+    new Notification(mode==='work'?S.notifWorkMsg:S.notifBreakMsg);
+  }
+  if(mode==='work'){
+    completedCount++; stats.completedToday++; stats.completedWeek=(stats.completedWeek||0)+1; saveStats();
+    const nextIsLong = completedCount % S.longInterval === 0;
+    setMode(nextIsLong?'long':'short');
+    if(S.autoStartBreaks) startTimer();
+  } else {
+    setMode('work');
+    if(S.autoStartWork) startTimer();
+  }
+  updateDisplay();
+}
+async function apiStart(){
+  if(!S.apiEnabled) return;
+  try{
+    const res=await fetch(`${S.apiUrl}/start`,{method:'POST'});
+    const data=await res.json().catch(()=>null);
+    apiSessionId = data && (data.id ?? data.pomodoro?.id) || apiSessionId || Math.floor(Math.random()*1000);
+    apiPollId=setInterval(apiPollState,5000);
+  }catch(e){ /* server not reachable, run locally */ }
+}
+async function apiPollState(){
+  if(!S.apiEnabled || apiSessionId==null) return;
+  try{ await fetch(`${S.apiUrl}/state?id=${apiSessionId}`); }catch(e){}
+}
+async function apiStop(){
+  if(!S.apiEnabled || apiSessionId==null) return;
+  clearInterval(apiPollId);
+  try{ await fetch(`${S.apiUrl}/stop?id=${apiSessionId}`,{method:'PUT'}); }catch(e){}
+}
+function startTimer(){
+  if(running) return;
+  running=true; $('#startBtn').textContent='Pause';
+  try{ if(S.startSoundEnabled) playStartSound(); }catch(e){ console.error('start sound failed',e); }
+  try{ if(S.keepAwake) requestWakeLock(); }catch(e){}
+  try{ if(S.musicEnabled) startMusic(); }catch(e){ console.error('music failed',e); }
+  try{ apiStart(); }catch(e){}
+  timerId=setInterval(tick,1000);
+}
+function pauseTimer(){ running=false; $('#startBtn').textContent='Start'; clearInterval(timerId); stopMusic(); apiStop(); }
+let resetArmed=false, resetArmTimeout=null;
+function resetTimer(){
+  if(S.confirmReset && running){
+    if(!resetArmed){
+      resetArmed=true; $('#resetBtn').textContent='Sure?';
+      clearTimeout(resetArmTimeout);
+      resetArmTimeout=setTimeout(()=>{ resetArmed=false; $('#resetBtn').textContent='Reset'; },3000);
+      return;
+    }
+    resetArmed=false; clearTimeout(resetArmTimeout); $('#resetBtn').textContent='Reset';
+  }
+  pauseTimer(); remaining=durFor(mode); updateDisplay();
+}
+$('#startBtn').onclick=()=>running?pauseTimer():startTimer();
+$('#resetBtn').onclick=resetTimer;
+$('#skipBtn').onclick=()=>{ pauseTimer(); remaining=0; finishSession(); };
+document.querySelectorAll('.mode-btn').forEach(b=>b.onclick=()=>{ if(S.strictMode && running) return; pauseTimer(); setMode(b.dataset.mode); });
+
+let wakeLock=null;
+async function requestWakeLock(){ try{ wakeLock = await navigator.wakeLock.request('screen'); }catch(e){} }
+document.addEventListener('visibilitychange',()=>{ if(S.autoPauseTab && document.hidden && running) pauseTimer(); });
+
+// ---- Sound engine ----
+let actx=null;
+function ac(){ if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)(); return actx; }
+function tone(freqs,dur,type='sine',vol=0.5){
+  if(S.muteAll) return;
+  const ctx=ac(); const t0=ctx.currentTime;
+  freqs.forEach((f,i)=>{
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type=type; o.frequency.value=f;
+    g.gain.setValueAtTime(0,t0+i*0.12);
+    g.gain.linearRampToValueAtTime(vol,t0+i*0.12+0.02);
+    g.gain.exponentialRampToValueAtTime(0.001,t0+i*0.12+dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t0+i*0.12); o.stop(t0+i*0.12+dur+0.05);
+  });
+}
+const alarmPresets={
+  bell:()=>tone([880,660],1.2,'sine',S.alarmVolume/100*0.6),
+  chime:()=>tone([523,659,784],1.4,'triangle',S.alarmVolume/100*0.5),
+  digital:()=>tone([1000,1000,1000],0.15,'square',S.alarmVolume/100*0.4),
+  soft:()=>tone([440],1.6,'sine',S.alarmVolume/100*0.5),
+  gong:()=>tone([196,98],2.2,'sine',S.alarmVolume/100*0.6),
+  marimba:()=>tone([392,494,587],1.0,'triangle',S.alarmVolume/100*0.5),
+  alert:()=>tone([1200,900,1200,900],0.9,'square',S.alarmVolume/100*0.4),
+  cosmic:()=>tone([300,450,600,900],1.8,'sine',S.alarmVolume/100*0.5),
+  glass:()=>tone([1046,1318],1.0,'sine',S.alarmVolume/100*0.45),
+  drum:()=>tone([90,90,90],0.5,'square',S.alarmVolume/100*0.55)
+};
+function playAlarm(){
+  if(S.useCustomSound && $('#customAudio').src){ $('#customAudio').volume=S.alarmVolume/100; $('#customAudio').currentTime=0; $('#customAudio').play().catch(()=>{}); return; }
+  let n=Math.max(1,S.alarmRepeat);
+  for(let i=0;i<n;i++) setTimeout(()=>{ (alarmPresets[S.alarmSound]||alarmPresets.bell)(); }, i*1500);
+}
+function playTick(){ const styles={soft:[1200,'sine',0.06],digital:[2000,'square',0.05],wood:[600,'triangle',0.06]}; const [f,ty,base]=styles[S.tickStyle]||styles.soft; tone([f],0.05,ty,base*(S.tickVolume/100)*3); }
+let musicNodes=[];
+function stopMusic(){
+  musicNodes.forEach(n=>{ try{ n.stop && n.stop(); n.disconnect && n.disconnect(); }catch(e){} });
+  musicNodes=[];
+}
+function startMusic(){
+  if(S.muteAll) return;
+  try{ _startMusic(); }catch(e){ console.error('music failed to start',e); }
+}
+function _startMusic(){
+  stopMusic();
+  const ctx=ac(); const master=ctx.createGain();
+  master.gain.value = (S.musicVolume/100) * 0.18;
+  master.connect(ctx.destination);
+  musicNodes.push(master);
+  const track=S.musicTrack;
+  if(track==='rain'){
+    const bufferSize=2*ctx.sampleRate; const buf=ctx.createBuffer(1,bufferSize,ctx.sampleRate);
+    const data=buf.getChannelData(0); for(let i=0;i<bufferSize;i++) data[i]=(Math.random()*2-1)*0.4;
+    const noise=ctx.createBufferSource(); noise.buffer=buf; noise.loop=true;
+    const filt=ctx.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=900;
+    noise.connect(filt); filt.connect(master); noise.start();
+    musicNodes.push(noise,filt);
+  } else {
+    const chordSets={ pad:[[220,277,329],[196,246,294]], lofi:[[261,329,392],[246,311,370]], drone:[[110,165],[98,147]], keys:[[330,415,493],[294,370,440]] };
+    const chords=chordSets[track]||chordSets.pad;
+    let step=0;
+    function playChord(){
+      const notes=chords[step%chords.length]; step++;
+      notes.forEach(f=>{
+        const o=ctx.createOscillator(), g=ctx.createGain();
+        o.type = track==='lofi' ? 'triangle' : 'sine';
+        o.frequency.value=f;
+        const t0=ctx.currentTime;
+        g.gain.setValueAtTime(0,t0);
+        g.gain.linearRampToValueAtTime(0.5,t0+1.2);
+        g.gain.linearRampToValueAtTime(0,t0+4.5);
+        o.connect(g); g.connect(master);
+        o.start(t0); o.stop(t0+4.6);
+        musicNodes.push(o,g);
+      });
+    }
+    playChord();
+    const loopId=setInterval(()=>{ if(!running || !S.musicEnabled){ clearInterval(loopId); return;} playChord(); },4000);
+    musicNodes.push({stop:()=>clearInterval(loopId), disconnect:()=>{}});
+  }
+}
+function playStartSound(){ const starts={pop:[300,'sine'],rise:[440,'triangle'],click:[800,'square']}; const [f,ty]=starts[S.startSound]||starts.pop; tone([f,f*1.5],0.3,ty,0.3); }
+
+$('#customSoundFile').onchange=e=>{ const f=e.target.files[0]; if(f){ $('#customAudio').src=URL.createObjectURL(f); S.useCustomSound=true; save(); renderPanel(); } };
+
+// ---- Background / theme ----
+const themes={
+  ember:['#1a1c20','#e8a33d'], ocean:['#12202b','#4fb3bf'], forest:['#151d18','#7fbf6a'],
+  plum:['#1e1626','#b183e0'], rose:['#241417','#e2789a'], slate:['#1c1e24','#8fa1b3'],
+  paper:['#f3f1ec','#c9793f'], mono:['#141414','#e5e5e5']
+};
+function applyTheme(){
+  const t=themes[S.theme]||themes.ember;
+  document.documentElement.style.setProperty('--bg',t[0]);
+  document.documentElement.style.setProperty('--accent', S.accent||t[1]);
+  document.documentElement.style.setProperty('--accent-2', S.accent||t[1]);
+  document.documentElement.setAttribute('data-theme', S.colorMode==='auto'?'':S.colorMode);
+  $('#bgAnim').style.display = S.animatedBg?'block':'none';
+  document.documentElement.style.setProperty('--motion', S.reduceMotion?0.001:1);
+  document.documentElement.setAttribute('data-reduce-motion', S.reduceMotion);
+  document.documentElement.setAttribute('data-large-buttons', S.largeButtons);
+  document.documentElement.setAttribute('data-contrast', S.highContrast?'high':'normal');
+  document.documentElement.style.setProperty('--fs-scale', S.largerFont?1.15:(S.fontSize==='lg'?1.1:S.fontSize==='sm'?0.9:1));
+  document.documentElement.style.setProperty('--font-body', S.font==='mono'?"'Courier New',monospace":S.font==='serif'?"Georgia,serif":"'Inter',sans-serif");
+  $('.time') && ($('.time').style.fontFamily = S.font==='mono'?"'Courier New',monospace":"'Space Grotesk',sans-serif");
+  $('#goalBar').style.display = S.showStats? 'flex':'none';
+  document.body.style.filter = S.hideCursorIdle? '' : '';
+}
+$('#customBgFile').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const url=URL.createObjectURL(f);
+  $('#bgCustom').style.backgroundImage=`url(${url})`;
+  $('#bgCustom').style.filter=`blur(${S.bgBlur}px)`;
+  $('#bgDim').style.background='var(--bg)';
+  $('#bgDim').style.opacity = S.bgOpacity/100;
+  save();
+};
+
+// ---- Settings panel ----
+function toggleRow(id,label,desc,key){
+  return `<div class="setting-row"><div><label>${label}</label>${desc?`<span class="desc">${desc}</span>`:''}</div>
+  <label class="switch"><input type="checkbox" id="${id}" ${S[key]?'checked':''}><span class="slider-tg"></span></label></div>`;
+}
+function selectRow(id,label,key,opts){
+  return `<div class="setting-row"><label>${label}</label><select id="${id}">${opts.map(o=>`<option value="${o[0]}" ${S[key]===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>`;
+}
+function numRow(id,label,key,min,max){
+  return `<div class="setting-row"><label>${label}</label><input type="number" id="${id}" min="${min}" max="${max}" value="${S[key]}"></div>`;
+}
+function rangeRow(id,label,key,min,max){
+  return `<div class="setting-row"><label>${label}</label><input type="range" id="${id}" min="${min}" max="${max}" value="${S[key]}"></div>`;
+}
+
+const tabsHTML={
+timer:()=>`
+  ${numRow('workMin','Focus duration (min)','workMin',1,120)}
+  ${numRow('shortMin','Short break (min)','shortMin',1,60)}
+  ${numRow('longMin','Long break (min)','longMin',1,90)}
+  ${numRow('longInterval','Long break every N sessions','longInterval',1,10)}
+  ${toggleRow('autoStartBreaks','Auto-start breaks','','autoStartBreaks')}
+  ${toggleRow('autoStartWork','Auto-start next focus session','','autoStartWork')}
+  ${numRow('dailyGoal','Daily pomodoro goal','dailyGoal',1,30)}
+  ${toggleRow('strictMode','Strict mode','Lock mode switching while running','strictMode')}
+  ${toggleRow('endAutoSkip','Auto-skip on double end','','endAutoSkip')}
+`,
+sound:()=>`
+  ${selectRow('alarmSound','Alarm sound','alarmSound',[['bell','Bell'],['chime','Chime'],['digital','Digital beep'],['soft','Soft tone'],['gong','Gong'],['marimba','Marimba'],['alert','Alert'],['cosmic','Cosmic'],['glass','Glass'],['drum','Drum']])}
+  ${rangeRow('alarmVolume','Alarm volume','alarmVolume',0,100)}
+  ${numRow('alarmRepeat','Alarm repeat count','alarmRepeat',1,5)}
+  ${toggleRow('tickEnabled','Ticking sound','','tickEnabled')}
+  ${selectRow('tickStyle','Tick style','tickStyle',[['soft','Soft'],['digital','Digital'],['wood','Wood block']])}
+  ${rangeRow('tickVolume','Tick volume','tickVolume',0,100)}
+  ${toggleRow('startSoundEnabled','Sound on session start','','startSoundEnabled')}
+  ${selectRow('startSound','Start sound','startSound',[['pop','Pop'],['rise','Rise'],['click','Click']])}
+  ${toggleRow('muteAll','Mute all sounds','','muteAll')}
+  <div class="setting-row"><label>Custom alarm sound</label><button class="icon-btn" style="width:auto;padding:0 12px;" onclick="document.getElementById('customSoundFile').click()">Upload</button></div>
+  ${toggleRow('useCustomSound','Use custom sound for alarm','','useCustomSound')}
+  ${toggleRow('musicEnabled','Background music while running','Fades in when the timer decreases','musicEnabled')}
+  ${selectRow('musicTrack','Music track','musicTrack',[['pad','Calm pad'],['lofi','Lo-fi loop'],['rain','Soft rain noise'],['drone','Deep drone'],['keys','Ambient keys']])}
+  ${rangeRow('musicVolume','Music volume','musicVolume',0,100)}
+`,
+appearance:()=>`
+  ${selectRow('theme','Theme','theme',Object.keys(themes).map(k=>[k,k[0].toUpperCase()+k.slice(1)]))}
+  ${selectRow('colorMode','Color mode','colorMode',[['auto','Auto'],['dark','Dark'],['light','Light']])}
+  <div class="setting-row"><label>Accent color</label><input type="color" id="accent" value="${S.accent}"></div>
+  <div class="setting-row"><label>Custom background image</label><button class="icon-btn" style="width:auto;padding:0 12px;" onclick="document.getElementById('customBgFile').click()">Upload</button></div>
+  ${rangeRow('bgBlur','Background blur','bgBlur',0,20)}
+  ${rangeRow('bgOpacity','Background dim opacity','bgOpacity',0,100)}
+  ${toggleRow('animatedBg','Animated background','','animatedBg')}
+  ${selectRow('font','Font style','font',[['display','Space Grotesk'],['serif','Serif'],['mono','Monospace']])}
+  ${selectRow('fontSize','Font size','fontSize',[['sm','Small'],['md','Medium'],['lg','Large']])}
+  ${selectRow('ringStyle','Progress ring style','ringStyle',[['solid','Solid'],['dashed','Dashed']])}
+  ${toggleRow('showDigital','Show digital time','','showDigital')}
+  ${toggleRow('compactMode','Compact layout','','compactMode')}
+`,
+notif:()=>`
+  ${toggleRow('notifEnabled','Browser notifications','','notifEnabled')}
+  <div class="setting-row"><label>Request permission</label><button class="icon-btn" style="width:auto;padding:0 12px;" id="reqNotifPerm">Enable</button></div>
+  <div class="setting-row" style="flex-direction:column;align-items:stretch;"><label>Focus-end message</label><input type="text" id="notifWorkMsg" value="${S.notifWorkMsg}" style="max-width:100%;margin-top:6px;"></div>
+  <div class="setting-row" style="flex-direction:column;align-items:stretch;"><label>Break-end message</label><input type="text" id="notifBreakMsg" value="${S.notifBreakMsg}" style="max-width:100%;margin-top:6px;"></div>
+  ${toggleRow('notifSound','Notification sound','','notifSound')}
+  ${toggleRow('titleCountdown','Countdown in browser tab title','','titleCountdown')}
+`,
+behavior:()=>`
+  ${toggleRow('keepAwake','Keep screen awake','','keepAwake')}
+  ${toggleRow('autoPauseTab','Auto-pause on tab switch','','autoPauseTab')}
+  ${toggleRow('kbShortcuts','Keyboard shortcuts (space/r/s)','','kbShortcuts')}
+  ${toggleRow('confirmReset','Confirm before resetting','','confirmReset')}
+  ${toggleRow('fullscreenMode','Prefer fullscreen mode','','fullscreenMode')}
+  ${toggleRow('hideCursorIdle','Hide cursor when idle','','hideCursorIdle')}
+`,
+stats:()=>`
+  ${toggleRow('showStats','Show goal bar','','showStats')}
+  ${numRow('weeklyGoal','Weekly goal','weeklyGoal',1,100)}
+  ${toggleRow('trackStreak','Track daily streak','','trackStreak')}
+  ${toggleRow('showHistory','Show completed history','','showHistory')}
+  <div class="setting-row"><label>Today completed</label><span>${stats.completedToday}</span></div>
+  <button class="reset-btn" id="resetStatsBtn" style="background:var(--panel-2);color:var(--text);">Reset statistics</button>
+`,
+access:()=>`
+  ${toggleRow('highContrast','High contrast mode','','highContrast')}
+  ${toggleRow('reduceMotion','Reduce motion','','reduceMotion')}
+  ${toggleRow('largeButtons','Larger buttons','','largeButtons')}
+  ${toggleRow('largerFont','Larger base font','','largerFont')}
+  ${selectRow('language','Language','language',[['en','English'],['tr','Türkçe'],['es','Español'],['de','Deutsch']])}
+  <div class="small-note">Language selection is stored but this build's UI text is English-only.</div>
+  <button class="reset-btn" id="resetAllBtn">Reset all settings to defaults</button>
+`,
+api:()=>`
+  ${toggleRow('apiEnabled','Sync with Pomodoro API','Calls your local server: /start, /state, /stop','apiEnabled')}
+  <div class="setting-row" style="flex-direction:column;align-items:stretch;"><label>API base URL</label><input type="text" id="apiUrl" value="${S.apiUrl}" style="max-width:100%;margin-top:6px;"></div>
+  <div class="setting-row"><label>Connection</label><span id="apiStatus" style="font-size:.78rem;color:var(--muted);">${apiSessionId?('linked · id '+apiSessionId):'not connected'}</span></div>
+  <div class="small-note">Requires a server implementing POST /start, GET /state?id=, PUT /stop?id= (e.g. running on localhost:3000). Works when this file is downloaded and opened directly; browser security may block requests from the hosted preview link.</div>
+`
+};
+let activeTab='timer';
+function renderPanel(){
+  $('#panelBody').innerHTML = tabsHTML[activeTab]();
+  bindPanelInputs();
+}
+function bindPanelInputs(){
+  const body=$('#panelBody');
+  body.querySelectorAll('input[type=checkbox]').forEach(el=>el.onchange=()=>{ S[el.id]=el.checked; save(); applyTheme(); refreshTimeIfIdle();
+    if(el.id==='musicEnabled'){ if(el.checked && running) startMusic(); else stopMusic(); }
+  });
+  body.querySelectorAll('input[type=number]').forEach(el=>el.oninput=()=>{ S[el.id]=Number(el.value)||1; save(); refreshTimeIfIdle(); });
+  body.querySelectorAll('input[type=range]').forEach(el=>el.oninput=()=>{ S[el.id]=Number(el.value); save();
+    if(el.id==='musicVolume' && musicNodes[0]) musicNodes[0].gain.value=(S.musicVolume/100)*0.18;
+  });
+  body.querySelectorAll('select').forEach(el=>el.onchange=()=>{ S[el.id]=el.value; save(); applyTheme();
+    if(el.id==='musicTrack' && S.musicEnabled && running) startMusic();
+  });
+  const acc=body.querySelector('#accent'); if(acc) acc.oninput=()=>{ S.accent=acc.value; save(); applyTheme(); };
+  const apiUrlEl=body.querySelector('#apiUrl'); if(apiUrlEl) apiUrlEl.oninput=()=>{ S.apiUrl=apiUrlEl.value.replace(/\/$/,''); save(); };
+  const wMsg=body.querySelector('#notifWorkMsg'); if(wMsg) wMsg.oninput=()=>{ S.notifWorkMsg=wMsg.value; save(); };
+  const bMsg=body.querySelector('#notifBreakMsg'); if(bMsg) bMsg.oninput=()=>{ S.notifBreakMsg=bMsg.value; save(); };
+  const reqPerm=body.querySelector('#reqNotifPerm'); if(reqPerm) reqPerm.onclick=()=>{ if('Notification' in window) Notification.requestPermission(); };
+  const resetStats=body.querySelector('#resetStatsBtn'); if(resetStats) resetStats.onclick=()=>{ stats={completedToday:0,completedWeek:0,streak:0,date:today}; saveStats(); renderPanel(); updateDisplay(); };
+  const resetAll=body.querySelector('#resetAllBtn'); if(resetAll){
+    resetAll.onclick=()=>{
+      if(resetAll.dataset.armed!=='1'){
+        resetAll.dataset.armed='1'; resetAll.textContent='Click again to confirm';
+        clearTimeout(resetAll._t); resetAll._t=setTimeout(()=>{ resetAll.dataset.armed='0'; resetAll.textContent='Reset all settings to defaults'; },3000);
+        return;
+      }
+      S=JSON.parse(JSON.stringify(defaults)); save(); applyTheme(); renderPanel(); setMode(mode);
+    };
+  }
+}
+function refreshTimeIfIdle(){ if(!running){ remaining=durFor(mode); updateDisplay(); } }
+$('#tabStrip').addEventListener('click',e=>{
+  if(e.target.tagName==='BUTTON'){ activeTab=e.target.dataset.tab; document.querySelectorAll('#tabStrip button').forEach(b=>b.classList.toggle('active',b===e.target)); renderPanel(); }
+});
+$('#openSettings').onclick=()=>{ $('#overlay').classList.add('open'); $('#panel').classList.add('open'); };
+$('#closeSettings').onclick=()=>{ $('#overlay').classList.remove('open'); $('#panel').classList.remove('open'); };
+$('#overlay').onclick=()=>{ $('#overlay').classList.remove('open'); $('#panel').classList.remove('open'); };
+document.addEventListener('keydown',e=>{
+  if(!S.kbShortcuts) return;
+  if(e.code==='Space'){ e.preventDefault(); running?pauseTimer():startTimer(); }
+  if(e.key==='r') resetTimer();
+  if(e.key==='s'){ pauseTimer(); remaining=0; finishSession(); }
+});
+
+try{ applyTheme(); }catch(e){ console.error('applyTheme failed',e); }
+try{ renderPanel(); }catch(e){ console.error('renderPanel failed',e); }
+try{ setMode('work'); }catch(e){ console.error('setMode failed',e); }
+try{ updateDisplay(); }catch(e){ console.error('updateDisplay failed',e); }
+</script>
+</body>
+</html>
